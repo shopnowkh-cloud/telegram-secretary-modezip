@@ -45,59 +45,77 @@ function saveConnections(map) {
 const businessConnections = loadConnections();
 console.log(`📂 Loaded ${businessConnections.size} saved connection(s)`);
 
-// Cache: message_id → { text, from, chatId } — keeps last 500 messages
+// ===================================
+// Message cache — stores full message object
+// ===================================
 const messageCache = new Map();
 const MAX_CACHE = 500;
 
-function getMessageContent(msg) {
-  if (msg.text)               return msg.text;
-  if (msg.photo)              return `[🖼 រូបភាព${msg.caption ? `: ${msg.caption}` : ""}]`;
-  if (msg.video)              return `[🎥 វីដេអូ${msg.caption ? `: ${msg.caption}` : ""}]`;
-  if (msg.voice)              return "[🎤 Voice message]";
-  if (msg.video_note)         return "[📹 Video note]";
-  if (msg.audio)              return `[🎵 Audio: ${msg.audio.title || msg.audio.file_name || ""}]`;
-  if (msg.document)           return `[📄 File: ${msg.document.file_name || ""}]`;
-  if (msg.sticker)            return `[${msg.sticker.emoji || ""}Sticker: ${msg.sticker.set_name || ""}]`;
-  if (msg.animation)         return "[🎞 GIF]";
-  if (msg.location)           return `[📍 Location: ${msg.location.latitude}, ${msg.location.longitude}]`;
-  if (msg.contact)            return `[👤 Contact: ${msg.contact.first_name}]`;
-  if (msg.poll)               return `[📊 Poll: ${msg.poll.question}]`;
-  return "[❓ Unknown message type]";
-}
-
 function cacheMessage(msg) {
   if (messageCache.size >= MAX_CACHE) {
-    const firstKey = messageCache.keys().next().value;
-    messageCache.delete(firstKey);
+    messageCache.delete(messageCache.keys().next().value);
   }
-  messageCache.set(msg.message_id, {
-    text: getMessageContent(msg),
-    from: msg.from?.first_name || "Unknown",
-    chatId: msg.chat?.id,
-  });
+  messageCache.set(msg.message_id, msg);
+  console.log(`💾 Cached msg_id: ${msg.message_id}`);
+}
+
+// Resend original message content to owner chat
+async function resendOriginal(ownerChatId, msg) {
+  const name = msg.from?.first_name || "Customer";
+  const header = `🗑️ <b>${name}</b> បានលុបសារ:\n`;
+  const opts = { parse_mode: "HTML" };
+
+  if (msg.text) {
+    await bot.sendMessage(ownerChatId, header + msg.text, opts);
+  } else if (msg.photo) {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    await bot.sendPhoto(ownerChatId, fileId, { caption: header + (msg.caption || ""), ...opts });
+  } else if (msg.video) {
+    await bot.sendVideo(ownerChatId, msg.video.file_id, { caption: header + (msg.caption || ""), ...opts });
+  } else if (msg.voice) {
+    await bot.sendVoice(ownerChatId, msg.voice.file_id, { caption: header, ...opts });
+  } else if (msg.video_note) {
+    await bot.sendMessage(ownerChatId, header, opts);
+    await bot.sendVideoNote(ownerChatId, msg.video_note.file_id);
+  } else if (msg.audio) {
+    await bot.sendAudio(ownerChatId, msg.audio.file_id, { caption: header + (msg.caption || ""), ...opts });
+  } else if (msg.document) {
+    await bot.sendDocument(ownerChatId, msg.document.file_id, { caption: header + (msg.caption || ""), ...opts });
+  } else if (msg.sticker) {
+    await bot.sendMessage(ownerChatId, header, opts);
+    await bot.sendSticker(ownerChatId, msg.sticker.file_id);
+  } else if (msg.animation) {
+    await bot.sendAnimation(ownerChatId, msg.animation.file_id, { caption: header + (msg.caption || ""), ...opts });
+  } else if (msg.location) {
+    await bot.sendMessage(ownerChatId, header, opts);
+    await bot.sendLocation(ownerChatId, msg.location.latitude, msg.location.longitude);
+  } else if (msg.contact) {
+    await bot.sendMessage(ownerChatId, header, opts);
+    await bot.sendContact(ownerChatId, msg.contact.phone_number, msg.contact.first_name);
+  } else {
+    await bot.sendMessage(ownerChatId, header + "<i>[Unknown type]</i>", opts);
+  }
 }
 
 // ===================================
 // /start — confirm bot is alive
 // ===================================
 bot.onText(/\/start/, async (msg) => {
-  const conn = [...businessConnections.values()].find(c => c.ownerChatId === msg.chat.id);
   await bot.sendMessage(
     msg.chat.id,
-    `✅ *Bot Online!*\n\n` +
-    `🗑️ កំពុង listen: \`deleted_business_messages\`\n` +
-    `📡 Connections: *${businessConnections.size}*\n` +
+    `✅ <b>Bot Online!</b>\n\n` +
+    `🗑️ Listening: deleted_business_messages\n` +
+    `📡 Connections: ${businessConnections.size}\n` +
     `🕐 ${new Date().toLocaleString()}`,
-    { parse_mode: "Markdown" }
+    { parse_mode: "HTML" }
   );
 });
 
 // ===================================
-// business_message — Cache message text
+// business_message — Cache full message
 // ===================================
 bot.on("business_message", (msg) => {
   cacheMessage(msg);
-  console.log(`💾 Cached msg_id: ${msg.message_id} | "${msg.text || "[media]"}"`);
 });
 
 // ===================================
@@ -122,7 +140,7 @@ bot.on("business_connection", async (bc) => {
 });
 
 // ===================================
-// deleted_business_messages — Notify owner
+// deleted_business_messages — Resend original to owner
 // ===================================
 bot.on("deleted_business_messages", async (update) => {
   const bcId = update.business_connection_id;
@@ -130,29 +148,24 @@ bot.on("deleted_business_messages", async (update) => {
   const customerChatId = update.chat?.id;
   const conn = businessConnections.get(bcId);
 
-  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | bcId: ${bcId} | customerChatId: ${customerChatId}`);
+  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | customerChatId: ${customerChatId}`);
 
-  if (conn?.ownerChatId) {
-    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-    const lines = messageIds.map((id) => {
-      const cached = messageCache.get(id);
-      if (cached) {
-        return `🗑 <b>${esc(cached.from)}:</b> "${esc(cached.text)}"`;
-      }
-      return `🗑 msg_id <code>${id}</code> <i>(text not cached)</i>`;
-    });
-
-    await bot.sendMessage(
-      conn.ownerChatId,
-      `🗑️ <b>Customer បានលុបសារ!</b>\n\n` +
-      lines.join("\n") +
-      `\n\n👥 Chat ID: <code>${customerChatId}</code>\n` +
-      `🕐 ${new Date().toLocaleString()}`,
-      { parse_mode: "HTML" }
-    );
-  } else {
+  if (!conn?.ownerChatId) {
     console.warn(`⚠️ No owner found for bcId: ${bcId}`);
+    return;
+  }
+
+  for (const id of messageIds) {
+    const cached = messageCache.get(id);
+    if (cached) {
+      await resendOriginal(conn.ownerChatId, cached);
+    } else {
+      await bot.sendMessage(
+        conn.ownerChatId,
+        `🗑️ Customer បានលុបសារ\n<i>msg_id ${id} — not cached</i>`,
+        { parse_mode: "HTML" }
+      );
+    }
   }
 });
 
