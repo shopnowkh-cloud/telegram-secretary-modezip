@@ -51,6 +51,11 @@ console.log(`📂 Loaded ${businessConnections.size} saved connection(s)`);
 const messageCache = new Map();
 const MAX_CACHE = 500;
 
+// ===================================
+// Deletion counter — K1a, K1b, K2a…
+// ===================================
+let deletionCounter = 0;
+
 function cacheMessage(msg) {
   if (messageCache.size >= MAX_CACHE) {
     messageCache.delete(messageCache.keys().next().value);
@@ -60,9 +65,12 @@ function cacheMessage(msg) {
 }
 
 // Resend original message content to owner chat
-async function resendOriginal(ownerChatId, msg) {
-  const name = msg.from?.first_name || "Customer";
-  const header = `🗑️ <b>${name}</b> បានលុបសារ:\n`;
+async function resendOriginal(ownerChatId, msg, label) {
+  const firstName = msg.from?.first_name || "";
+  const lastName = msg.from?.last_name || "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Customer";
+  const username = msg.from?.username ? ` @${msg.from.username}` : "";
+  const header = `<b>${label}. ${fullName}${username} deleted a message:</b>\n`;
   const opts = { parse_mode: "HTML" };
 
   if (msg.text) {
@@ -155,14 +163,18 @@ bot.on("deleted_business_messages", async (update) => {
     return;
   }
 
-  for (const id of messageIds) {
+  deletionCounter++;
+  for (let i = 0; i < messageIds.length; i++) {
+    const id = messageIds[i];
+    const letter = String.fromCharCode(97 + i); // a, b, c…
+    const label = `K${deletionCounter}${letter}`;
     const cached = messageCache.get(id);
     if (cached) {
-      await resendOriginal(conn.ownerChatId, cached);
+      await resendOriginal(conn.ownerChatId, cached, label);
     } else {
       await bot.sendMessage(
         conn.ownerChatId,
-        `🗑️ Customer បានលុបសារ\n<i>msg_id ${id} — not cached</i>`,
+        `<b>${label}. deleted a message:</b>\n<i>msg_id ${id} — not cached</i>`,
         { parse_mode: "HTML" }
       );
     }
