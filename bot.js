@@ -48,13 +48,30 @@ console.log(`📂 Loaded ${businessConnections.size} saved connection(s)`);
 // Cache: message_id → { text, from, chatId } — keeps last 500 messages
 const messageCache = new Map();
 const MAX_CACHE = 500;
+
+function getMessageContent(msg) {
+  if (msg.text)               return msg.text;
+  if (msg.photo)              return `[🖼 រូបភាព${msg.caption ? `: ${msg.caption}` : ""}]`;
+  if (msg.video)              return `[🎥 វីដេអូ${msg.caption ? `: ${msg.caption}` : ""}]`;
+  if (msg.voice)              return "[🎤 Voice message]";
+  if (msg.video_note)         return "[📹 Video note]";
+  if (msg.audio)              return `[🎵 Audio: ${msg.audio.title || msg.audio.file_name || ""}]`;
+  if (msg.document)           return `[📄 File: ${msg.document.file_name || ""}]`;
+  if (msg.sticker)            return `[${msg.sticker.emoji || ""}Sticker: ${msg.sticker.set_name || ""}]`;
+  if (msg.animation)         return "[🎞 GIF]";
+  if (msg.location)           return `[📍 Location: ${msg.location.latitude}, ${msg.location.longitude}]`;
+  if (msg.contact)            return `[👤 Contact: ${msg.contact.first_name}]`;
+  if (msg.poll)               return `[📊 Poll: ${msg.poll.question}]`;
+  return "[❓ Unknown message type]";
+}
+
 function cacheMessage(msg) {
   if (messageCache.size >= MAX_CACHE) {
     const firstKey = messageCache.keys().next().value;
     messageCache.delete(firstKey);
   }
   messageCache.set(msg.message_id, {
-    text: msg.text || msg.caption || "[media/sticker/file]",
+    text: getMessageContent(msg),
     from: msg.from?.first_name || "Unknown",
     chatId: msg.chat?.id,
   });
