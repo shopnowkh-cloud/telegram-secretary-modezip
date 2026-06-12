@@ -11,6 +11,7 @@ const bot = new TelegramBot(TOKEN, {
         "message",
         "business_connection",
         "business_message",
+        "edited_business_message",
         "deleted_business_messages",
       ],
     },
@@ -55,6 +56,11 @@ const MAX_CACHE = 500;
 // Deletion counter — K1a, K1b, K2a…
 // ===================================
 let deletionCounter = 0;
+
+// ===================================
+// Edit counter — E1, E2, E3…
+// ===================================
+let editCounter = 0;
 
 function cacheMessage(msg) {
   if (messageCache.size >= MAX_CACHE) {
@@ -124,6 +130,43 @@ bot.onText(/\/start/, async (msg) => {
 // ===================================
 bot.on("business_message", (msg) => {
   cacheMessage(msg);
+});
+
+// ===================================
+// edited_business_message — Notify owner of edit
+// ===================================
+bot.on("edited_business_message", async (msg) => {
+  const bcId = msg.business_connection_id;
+  const conn = businessConnections.get(bcId);
+
+  if (!conn?.ownerChatId) {
+    console.warn(`⚠️ No owner found for bcId: ${bcId}`);
+    return;
+  }
+
+  editCounter++;
+  const label = `E${editCounter}`;
+  const firstName = msg.from?.first_name || "";
+  const lastName = msg.from?.last_name || "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Customer";
+  const username = msg.from?.username ? ` @${msg.from.username}` : "";
+  const opts = { parse_mode: "HTML" };
+
+  const original = messageCache.get(msg.message_id);
+  const originalText = original?.text || original?.caption || "<i>[not cached]</i>";
+  const newText = msg.text || msg.caption || "<i>[media]</i>";
+
+  await bot.sendMessage(
+    conn.ownerChatId,
+    `<b>${label}. ${fullName}${username} edited a message:</b>\n` +
+    `<s>${originalText}</s>\n` +
+    `➡️ ${newText}`,
+    opts
+  );
+
+  // Update cache with the new version
+  cacheMessage(msg);
+  console.log(`✏️ Edit E${editCounter} by ${fullName} | msg_id: ${msg.message_id}`);
 });
 
 // ===================================
