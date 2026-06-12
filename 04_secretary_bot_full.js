@@ -24,11 +24,17 @@ const bot = new TelegramBot(TOKEN, {
 // Helper: delay function
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Helper: Secretary typing effect
+// Helper: Secretary typing effect (regular chat)
 async function secretaryType(chatId, ms = 1500) {
   await bot.sendChatAction(chatId, "typing");
   await delay(ms);
 }
+
+// ===================================
+// Store: business_connection_id → owner info
+// ====================================
+// Map: bcId → { ownerChatId, ownerName, connectedAt }
+const businessConnections = new Map();
 
 // ===================================
 // Regular Bot Commands
@@ -39,7 +45,7 @@ bot.onText(/\/start/, async (msg) => {
   await secretaryType(chatId, 1000);
   await bot.sendMessage(
     chatId,
-    "👩‍💼 សួស្ដី! ខ្ញុំជា Secretary Bot!\n\nខ្ញុំអាចជួយអ្នក:\n/appointment - ណាត់ជួប\n/remind - រំលឹក\n/note - កត់ត្រា"
+    "👩‍💼 សួស្ដី! ខ្ញុំជា Secretary Bot!\n\nខ្ញុំអាចជួយអ្នក:\n/appointment - ណាត់ជួប\n/remind - រំលឹក\n/note - កត់ត្រា\n/connections - មើល Business Connections"
   );
 });
 
@@ -61,6 +67,21 @@ bot.onText(/\/note/, async (msg) => {
   await bot.sendMessage(chatId, "📝 សូមវាយអ្វីដែលចង់កត់ត្រា...");
 });
 
+bot.onText(/\/connections/, async (msg) => {
+  const chatId = msg.chat.id;
+  await secretaryType(chatId, 800);
+  if (businessConnections.size === 0) {
+    return bot.sendMessage(chatId, "📡 មិនទាន់មាន Business Connection ណាមួយទេ។");
+  }
+  let list = `📡 *Business Connections (${businessConnections.size}):*\n\n`;
+  for (const [bcId, info] of businessConnections) {
+    list += `👤 *${info.ownerName}*\n`;
+    list += `🔑 \`${bcId}\`\n`;
+    list += `🕐 ${new Date(info.connectedAt).toLocaleString()}\n\n`;
+  }
+  await bot.sendMessage(chatId, list, { parse_mode: "Markdown" });
+});
+
 // Default regular message handler
 bot.on("message", async (msg) => {
   if (msg.text && !msg.text.startsWith("/")) {
@@ -71,25 +92,43 @@ bot.on("message", async (msg) => {
 });
 
 // ===================================
-// Business Connection Event
+// business_connection — Store owner info
 // ===================================
 
 bot.on("business_connection", async (bc) => {
   const { user, user_chat_id, can_reply, is_enabled, id } = bc;
+
   if (is_enabled) {
-    console.log(`✅ Business connected: ${user.first_name} (ID: ${id})`);
+    // ✅ Save owner info mapped to business_connection_id
+    businessConnections.set(id, {
+      ownerChatId: user_chat_id,
+      ownerName: user.first_name,
+      connectedAt: Date.now(),
+    });
+
+    console.log(`✅ Business connected: ${user.first_name} | bcId: ${id} | ownerChatId: ${user_chat_id}`);
+
     if (can_reply) {
       await secretaryType(user_chat_id, 800);
       await bot.sendMessage(
         user_chat_id,
         `👩‍💼 *Secretary Bot ភ្ជាប់ Business Account ដោយជោគជ័យ!*\n\n` +
         `✅ Bot នឹង auto-reply customer messages\n` +
-        `🔑 Connection ID: \`${id}\``,
+        `🔑 Connection ID: \`${id}\`\n\n` +
+        `📋 Commands:\n` +
+        `/connections - មើល connections ទាំងអស់`,
         { parse_mode: "Markdown" }
       );
     }
   } else {
-    console.log(`❌ Business disconnected: ${user.first_name}`);
+    // ❌ Remove from map when disconnected
+    businessConnections.delete(id);
+    console.log(`❌ Business disconnected: ${user.first_name} | bcId: ${id}`);
+    await bot.sendMessage(
+      user_chat_id,
+      `⚠️ *Secretary Bot ត្រូវបានផ្ដាច់ចេញ*\n\nBusiness Connection \`${id}\` បានបិទ។`,
+      { parse_mode: "Markdown" }
+    );
   }
 });
 
@@ -101,16 +140,15 @@ bot.on("business_message", async (msg) => {
   const chatId = msg.chat.id;
   const text = (msg.text || "").toLowerCase().trim();
   const name = msg.from?.first_name || "អតិថិជន";
-  const bcId = msg.business_connection_id; // ✅ required for replying in business chat
+  const bcId = msg.business_connection_id;
 
-  console.log(`💬 [business_message] from ${name} | business_connection_id: ${bcId}`);
+  console.log(`💬 [business_message] from ${name} | bcId: ${bcId}`);
 
-  // Secretary typing via business connection
   await bot.sendChatAction(chatId, "typing", { business_connection_id: bcId });
   await delay(1200);
 
-  const sendReply = (text, opts = {}) =>
-    bot.sendMessage(chatId, text, { business_connection_id: bcId, ...opts });
+  const sendReply = (replyText, opts = {}) =>
+    bot.sendMessage(chatId, replyText, { business_connection_id: bcId, ...opts });
 
   const replies = [
     {
@@ -162,31 +200,55 @@ bot.on("business_message", async (msg) => {
 bot.on("edited_business_message", async (msg) => {
   const name = msg.from?.first_name || "អតិថិជន";
   const bcId = msg.business_connection_id;
+  const conn = businessConnections.get(bcId);
 
-  console.log(`✏️ [edited_business_message] from ${name} | business_connection_id: ${bcId}`);
+  console.log(`✏️ [edited_business_message] from ${name} | bcId: ${bcId}`);
 
-  await bot.sendMessage(
-    msg.chat.id,
-    `✏️ *${name}* បានកែប្រែសារ:\n\n"${msg.text}"`,
-    { business_connection_id: bcId, parse_mode: "Markdown" }
-  );
+  // Notify owner in their private chat with bot
+  if (conn?.ownerChatId) {
+    await bot.sendMessage(
+      conn.ownerChatId,
+      `✏️ *Customer កែប្រែសារ!*\n\n` +
+      `👤 Customer: *${name}*\n` +
+      `💬 សារថ្មី: "${msg.text}"\n` +
+      `🔑 bcId: \`${bcId}\``,
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    console.warn(`⚠️ No owner found for bcId: ${bcId}`);
+  }
 });
 
 // ===================================
-// deleted_business_messages — Customer deletes messages
+// deleted_business_messages — Notify owner, NOT customer
 // ===================================
 
 bot.on("deleted_business_messages", async (update) => {
   const bcId = update.business_connection_id;
+  const messageIds = update.message_ids || [];
+  const customerChatId = update.chat?.id;
+  const conn = businessConnections.get(bcId);
 
-  console.log(`🗑️ [deleted_business_messages] IDs: ${update.message_ids?.join(", ")} | business_connection_id: ${bcId}`);
+  console.log(`🗑️ [deleted_business_messages] IDs: ${messageIds.join(", ")} | bcId: ${bcId} | customerChatId: ${customerChatId}`);
 
-  await bot.sendMessage(
-    update.chat.id,
-    `🗑️ សារ *${update.message_ids?.length || 0}* ត្រូវបានលុប\n` +
-    `IDs: \`${update.message_ids?.join(", ")}\``,
-    { business_connection_id: bcId, parse_mode: "Markdown" }
-  );
+  // ✅ Correct: notify OWNER in private chat (cannot reply to customer about deletions)
+  if (conn?.ownerChatId) {
+    await bot.sendMessage(
+      conn.ownerChatId,
+      `🗑️ *Customer បានលុបសារ!*\n\n` +
+      `👥 Chat ID: \`${customerChatId}\`\n` +
+      `📋 លុបសារចំនួន: *${messageIds.length}*\n` +
+      `🆔 Message IDs: \`${messageIds.join(", ")}\`\n` +
+      `🔑 bcId: \`${bcId}\`\n` +
+      `🕐 ${new Date().toLocaleString()}`,
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    // Fallback: log only — no owner chat found
+    console.warn(`⚠️ deleted_business_messages: owner not found for bcId: ${bcId}. Cannot notify.`);
+    console.warn(`   Customer Chat ID: ${customerChatId}`);
+    console.warn(`   Deleted IDs: ${messageIds.join(", ")}`);
+  }
 });
 
 console.log("🤖 Secretary Bot started!");
