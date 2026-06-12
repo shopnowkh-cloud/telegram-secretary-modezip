@@ -9,6 +9,6 @@
     "business": "node 06_business_setup_guide.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0"
+    "node-telegram-bot-api": "^0.67.0"
   }
 }
