@@ -21,8 +21,6 @@ const bot = new TelegramBot(TOKEN, {
   },
 });
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ===================================
 // Main Reply Keyboard
 // ===================================
@@ -44,19 +42,10 @@ const mainKeyboard = {
 const businessConnections = new Map();
 
 // ===================================
-// Helper: Secretary typing effect
-// ===================================
-async function secretaryType(chatId, ms = 1500) {
-  await bot.sendChatAction(chatId, "typing");
-  await delay(ms);
-}
-
-// ===================================
 // /start — show keyboard
 // ===================================
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
-  await secretaryType(chatId, 800);
   await bot.sendMessage(
     chatId,
     "👩‍💼 *សួស្ដី! ខ្ញុំជា Secretary Bot!*\n\nជ្រើសរើសពី keyboard ខាងក្រោម 👇",
@@ -72,9 +61,6 @@ bot.on("message", async (msg) => {
 
   const chatId = msg.chat.id;
   const text = msg.text.trim();
-
-  await bot.sendChatAction(chatId, "typing");
-  await delay(1000);
 
   // --- 📅 ណាត់ជួប ---
   if (text === "📅 ណាត់ជួប") {
@@ -174,7 +160,6 @@ bot.on("business_connection", async (bc) => {
     console.log(`✅ Business connected: ${user.first_name} | bcId: ${id}`);
 
     if (can_reply) {
-      await secretaryType(user_chat_id, 800);
       await bot.sendMessage(
         user_chat_id,
         `👩‍💼 *Secretary Bot ភ្ជាប់ Business Account ដោយជោគជ័យ!*\n\n` +
@@ -204,9 +189,6 @@ bot.on("business_message", async (msg) => {
   const bcId = msg.business_connection_id;
 
   console.log(`💬 [business_message] from ${name} | bcId: ${bcId}`);
-
-  await bot.sendChatAction(chatId, "typing", { business_connection_id: bcId });
-  await delay(1200);
 
   const sendReply = (replyText, opts = {}) =>
     bot.sendMessage(chatId, replyText, { business_connection_id: bcId, ...opts });
