@@ -4,6 +4,7 @@
 // ===================================
 
 const TelegramBot = require("node-telegram-bot-api");
+const fs = require("fs");
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN is not set");
 
@@ -38,8 +39,33 @@ const mainKeyboard = {
 
 // ===================================
 // Store: business_connection_id → owner info
+// Persisted to connections.json so it survives restarts
 // ===================================
-const businessConnections = new Map();
+const CONNECTIONS_FILE = "./connections.json";
+
+function loadConnections() {
+  try {
+    if (fs.existsSync(CONNECTIONS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CONNECTIONS_FILE, "utf8"));
+      return new Map(Object.entries(data));
+    }
+  } catch (e) {
+    console.error("⚠️ Failed to load connections:", e.message);
+  }
+  return new Map();
+}
+
+function saveConnections(map) {
+  try {
+    const obj = Object.fromEntries(map);
+    fs.writeFileSync(CONNECTIONS_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.error("⚠️ Failed to save connections:", e.message);
+  }
+}
+
+const businessConnections = loadConnections();
+console.log(`📂 Loaded ${businessConnections.size} saved connection(s)`);
 
 // ===================================
 // /start — show keyboard
@@ -156,8 +182,9 @@ bot.on("business_connection", async (bc) => {
       ownerName: user.first_name,
       connectedAt: Date.now(),
     });
+    saveConnections(businessConnections);
 
-    console.log(`✅ Business connected: ${user.first_name} | bcId: ${id}`);
+    console.log(`✅ Business connected: ${user.first_name} | bcId: ${id} | ownerChatId: ${user_chat_id}`);
 
     if (can_reply) {
       await bot.sendMessage(
@@ -170,6 +197,7 @@ bot.on("business_connection", async (bc) => {
     }
   } else {
     businessConnections.delete(id);
+    saveConnections(businessConnections);
     console.log(`❌ Business disconnected: ${user.first_name} | bcId: ${id}`);
     await bot.sendMessage(
       user_chat_id,
