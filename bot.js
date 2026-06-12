@@ -101,12 +101,12 @@ async function resendOriginal(ownerChatId, msg) {
 // /start — confirm bot is alive
 // ===================================
 bot.onText(/\/start/, async (msg) => {
+  const name = msg.from?.first_name || "អ្នក";
   await bot.sendMessage(
     msg.chat.id,
-    `✅ <b>Bot Online!</b>\n\n` +
-    `🗑️ Listening: deleted_business_messages\n` +
-    `📡 Connections: ${businessConnections.size}\n` +
-    `🕐 ${new Date().toLocaleString()}`,
+    `សូមស្វាគមន៍ ${name}\n\n` +
+    `🧑‍🏫 អ្វីដែលអាចធ្វើបាន៖\n` +
+    `• ជូនដំណឹងភ្លាមៗពេលដៃគូរបស់អ្នកកែសម្រួល ឬលុបសារ`,
     { parse_mode: "HTML" }
   );
 });
