@@ -116,22 +116,23 @@ bot.on("deleted_business_messages", async (update) => {
   console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | bcId: ${bcId} | customerChatId: ${customerChatId}`);
 
   if (conn?.ownerChatId) {
-    // Build deleted messages list with original text from cache
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
     const lines = messageIds.map((id) => {
       const cached = messageCache.get(id);
       if (cached) {
-        return `🗑 *${cached.from}:* "${cached.text}"`;
+        return `🗑 <b>${esc(cached.from)}:</b> "${esc(cached.text)}"`;
       }
-      return `🗑 msg_id \`${id}\` _(text not cached)_`;
+      return `🗑 msg_id <code>${id}</code> <i>(text not cached)</i>`;
     });
 
     await bot.sendMessage(
       conn.ownerChatId,
-      `🗑️ *Customer បានលុបសារ!*\n\n` +
+      `🗑️ <b>Customer បានលុបសារ!</b>\n\n` +
       lines.join("\n") +
-      `\n\n👥 Chat ID: \`${customerChatId}\`\n` +
+      `\n\n👥 Chat ID: <code>${customerChatId}</code>\n` +
       `🕐 ${new Date().toLocaleString()}`,
-      { parse_mode: "Markdown" }
+      { parse_mode: "HTML" }
     );
   } else {
     console.warn(`⚠️ No owner found for bcId: ${bcId}`);
