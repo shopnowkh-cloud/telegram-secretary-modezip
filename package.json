@@ -2,10 +2,11 @@
   "name": "telegram-secretary-mode",
   "version": "1.0.0",
   "description": "Telegram Bot Secretary Mode (sendChatAction) Examples",
-  "main": "04_secretary_bot_full.js",
+  "main": "06_business_setup_guide.js",
   "scripts": {
-    "start": "node 04_secretary_bot_full.js",
-    "basic": "node 01_basic.js"
+    "start": "node 06_business_setup_guide.js",
+    "basic": "node 01_basic.js",
+    "secretary": "node 04_secretary_bot_full.js"
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0"
