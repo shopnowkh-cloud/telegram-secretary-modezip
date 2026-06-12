@@ -256,11 +256,7 @@ bot.on("deleted_business_messages", async (update) => {
     if (cached) {
       await sendCachedContent(conn.ownerChatId, cached, header);
     } else {
-      await bot.sendMessage(
-        conn.ownerChatId,
-        `<b>${deleterName}${deleterUsername} deleted a message:</b>\n<i>[not cached]</i>`,
-        { parse_mode: "HTML" }
-      );
+      console.log(`⚠️ msg_id ${id} not cached — skipped notification`);
     }
   }
 });
