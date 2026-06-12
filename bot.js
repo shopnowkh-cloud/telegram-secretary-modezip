@@ -172,6 +172,7 @@ bot.on("edited_business_message", async (msg) => {
 // ===================================
 bot.on("business_connection", async (bc) => {
   const { user, user_chat_id, is_enabled, id } = bc;
+  const { full: ownerName, username: ownerUsername } = buildName(user);
 
   if (is_enabled) {
     businessConnections.set(id, {
@@ -180,11 +181,27 @@ bot.on("business_connection", async (bc) => {
       connectedAt: Date.now(),
     });
     saveConnections(businessConnections);
-    console.log(`✅ Connected: ${user.first_name} | bcId: ${id} | ownerChatId: ${user_chat_id}`);
+    console.log(`✅ Connected: ${ownerName} | bcId: ${id} | ownerChatId: ${user_chat_id}`);
+
+    await bot.sendMessage(
+      user_chat_id,
+      `✅ <b>Bot បានភ្ជាប់ជោគជ័យ!</b>\n\n` +
+      `👤 ${ownerName}${ownerUsername}\n` +
+      `🕐 ${new Date().toLocaleString("km-KH")}`,
+      { parse_mode: "HTML" }
+    );
   } else {
     businessConnections.delete(id);
     saveConnections(businessConnections);
-    console.log(`❌ Disconnected: ${user.first_name} | bcId: ${id}`);
+    console.log(`❌ Disconnected: ${ownerName} | bcId: ${id}`);
+
+    await bot.sendMessage(
+      user_chat_id,
+      `❌ <b>Bot បានផ្ដាច់ connection!</b>\n\n` +
+      `👤 ${ownerName}${ownerUsername}\n` +
+      `🕐 ${new Date().toLocaleString("km-KH")}`,
+      { parse_mode: "HTML" }
+    );
   }
 });
 
