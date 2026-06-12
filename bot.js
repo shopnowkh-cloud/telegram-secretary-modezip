@@ -177,6 +177,7 @@ bot.on("business_connection", async (bc) => {
   if (is_enabled) {
     businessConnections.set(id, {
       ownerChatId: user_chat_id,
+      ownerUserId: user.id,
       ownerName: user.first_name,
       connectedAt: Date.now(),
     });
@@ -213,20 +214,36 @@ bot.on("deleted_business_messages", async (update) => {
   const messageIds = update.message_ids || [];
   const conn = businessConnections.get(bcId);
 
-  // update.chat is always the correct person who deleted (the chat peer)
-  const { full: deleterName, username: deleterUsername } = buildName(update.chat);
-
-  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | by: ${deleterName}${deleterUsername}`);
-
   if (!conn?.ownerChatId) {
     console.warn(`⚠️ No owner found for bcId: ${bcId}`);
     return;
   }
 
-  const header = `<b>${deleterName}${deleterUsername} deleted a message:</b>\n`;
+  // Owner's user ID (ownerChatId == user ID for private chats)
+  const ownerUserId = conn.ownerUserId || conn.ownerChatId;
 
   for (const id of messageIds) {
     const cached = messageCache.get(id);
+
+    // Determine who deleted: compare sender ID with owner ID
+    let deleterName, deleterUsername;
+    if (cached?.from) {
+      const isOwner = cached.from.id === ownerUserId;
+      if (isOwner) {
+        // Owner deleted their own message — use owner info from cache
+        ({ full: deleterName, username: deleterUsername } = buildName(cached.from));
+      } else {
+        // Customer deleted their own message — use customer info from cache
+        ({ full: deleterName, username: deleterUsername } = buildName(cached.from));
+      }
+    } else {
+      // Not cached — fall back to update.chat (the peer/customer)
+      ({ full: deleterName, username: deleterUsername } = buildName(update.chat));
+    }
+
+    console.log(`🗑️ Deleted msg_id: ${id} | by: ${deleterName}${deleterUsername}`);
+    const header = `<b>${deleterName}${deleterUsername} deleted a message:</b>\n`;
+
     if (cached) {
       await sendCachedContent(conn.ownerChatId, cached, header);
     } else {
