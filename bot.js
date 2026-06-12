@@ -240,24 +240,26 @@ bot.on("deleted_business_messages", async (update) => {
   for (const id of messageIds) {
     const cached = messageCache.get(id);
 
-    // Priority: cached.from → senderCache → update.chat (fallback)
+    // Priority: cached.from → senderCache
     const senderFrom = cached?.from || senderCache.get(id);
-    let deleterName, deleterUsername;
-    if (senderFrom) {
-      ({ full: deleterName, username: deleterUsername } = buildName(senderFrom));
-    } else {
-      // Last resort: update.chat is the peer (customer)
-      ({ full: deleterName, username: deleterUsername } = buildName(update.chat));
+
+    // Skip if the owner deleted their own message
+    if (senderFrom && senderFrom.id === ownerUserId) {
+      console.log(`⏭️ msg_id ${id} deleted by owner — skipped notification`);
+      continue;
     }
+
+    // Skip if not cached (no content to show)
+    if (!cached) {
+      console.log(`⚠️ msg_id ${id} not cached — skipped notification`);
+      continue;
+    }
+
+    const { full: deleterName, username: deleterUsername } = buildName(senderFrom || update.chat);
 
     console.log(`🗑️ Deleted msg_id: ${id} | by: ${deleterName}${deleterUsername}`);
     const header = `<b>${deleterName}${deleterUsername} deleted a message:</b>\n`;
-
-    if (cached) {
-      await sendCachedContent(conn.ownerChatId, cached, header);
-    } else {
-      console.log(`⚠️ msg_id ${id} not cached — skipped notification`);
-    }
+    await sendCachedContent(conn.ownerChatId, cached, header);
   }
 });
 
