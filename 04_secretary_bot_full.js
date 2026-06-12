@@ -10,6 +10,7 @@ const bot = new TelegramBot(TOKEN, {
       allowed_updates: [
         "message",
         "business_connection",
+        "business_message",
         "deleted_business_messages",
       ],
     },
@@ -44,6 +45,21 @@ function saveConnections(map) {
 const businessConnections = loadConnections();
 console.log(`📂 Loaded ${businessConnections.size} saved connection(s)`);
 
+// Cache: message_id → { text, from, chatId } — keeps last 500 messages
+const messageCache = new Map();
+const MAX_CACHE = 500;
+function cacheMessage(msg) {
+  if (messageCache.size >= MAX_CACHE) {
+    const firstKey = messageCache.keys().next().value;
+    messageCache.delete(firstKey);
+  }
+  messageCache.set(msg.message_id, {
+    text: msg.text || msg.caption || "[media/sticker/file]",
+    from: msg.from?.first_name || "Unknown",
+    chatId: msg.chat?.id,
+  });
+}
+
 // ===================================
 // /start — confirm bot is alive
 // ===================================
@@ -57,6 +73,14 @@ bot.onText(/\/start/, async (msg) => {
     `🕐 ${new Date().toLocaleString()}`,
     { parse_mode: "Markdown" }
   );
+});
+
+// ===================================
+// business_message — Cache message text
+// ===================================
+bot.on("business_message", (msg) => {
+  cacheMessage(msg);
+  console.log(`💾 Cached msg_id: ${msg.message_id} | "${msg.text || "[media]"}"`);
 });
 
 // ===================================
@@ -92,13 +116,20 @@ bot.on("deleted_business_messages", async (update) => {
   console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | bcId: ${bcId} | customerChatId: ${customerChatId}`);
 
   if (conn?.ownerChatId) {
+    // Build deleted messages list with original text from cache
+    const lines = messageIds.map((id) => {
+      const cached = messageCache.get(id);
+      if (cached) {
+        return `🗑 *${cached.from}:* "${cached.text}"`;
+      }
+      return `🗑 msg_id \`${id}\` _(text not cached)_`;
+    });
+
     await bot.sendMessage(
       conn.ownerChatId,
       `🗑️ *Customer បានលុបសារ!*\n\n` +
-      `👥 Chat ID: \`${customerChatId}\`\n` +
-      `📋 លុបសារចំនួន: *${messageIds.length}*\n` +
-      `🆔 Message IDs: \`${messageIds.join(", ")}\`\n` +
-      `🔑 bcId: \`${bcId}\`\n` +
+      lines.join("\n") +
+      `\n\n👥 Chat ID: \`${customerChatId}\`\n` +
       `🕐 ${new Date().toLocaleString()}`,
       { parse_mode: "Markdown" }
     );
