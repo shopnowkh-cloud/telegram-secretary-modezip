@@ -3,7 +3,8 @@
 // ===================================
 
 const TelegramBot = require("node-telegram-bot-api");
-const TOKEN = "YOUR_BOT_TOKEN_HERE";
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN is not set");
 const bot = new TelegramBot(TOKEN, { polling: true });
 
 // Helper: delay function
