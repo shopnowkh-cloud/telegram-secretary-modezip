@@ -71,12 +71,12 @@ function cacheMessage(msg) {
 }
 
 // Resend original message content to owner chat
-async function resendOriginal(ownerChatId, msg, label) {
+async function resendOriginal(ownerChatId, msg) {
   const firstName = msg.from?.first_name || "";
   const lastName = msg.from?.last_name || "";
   const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Customer";
   const username = msg.from?.username ? ` @${msg.from.username}` : "";
-  const header = `<b>${label}. ${fullName}${username} deleted a message:</b>\n`;
+  const header = `<b>${fullName}${username} deleted a message:</b>\n`;
   const opts = { parse_mode: "HTML" };
 
   if (msg.text) {
@@ -215,18 +215,12 @@ bot.on("deleted_business_messages", async (update) => {
   deletionCounter++;
   for (let i = 0; i < messageIds.length; i++) {
     const id = messageIds[i];
-    const letter = String.fromCharCode(97 + i); // a, b, c…
-    const label = `K${deletionCounter}${letter}`;
     const cached = messageCache.get(id);
     if (cached) {
       // Use cached msg.from for name (most accurate — the actual sender)
       const fromFirst = cached.from?.first_name || chatFirstName;
       const fromLast = cached.from?.last_name || chatLastName;
-      const fromName = [fromFirst, fromLast].filter(Boolean).join(" ") || "Customer";
-      const fromUsername = cached.from?.username
-        ? ` @${cached.from.username}`
-        : chatUsername;
-      // Temporarily patch cached.from so resendOriginal picks up the right name
+      // Patch cached.from so resendOriginal picks up the right name
       const patchedMsg = {
         ...cached,
         from: {
@@ -236,11 +230,11 @@ bot.on("deleted_business_messages", async (update) => {
           username: cached.from?.username || chat.username,
         },
       };
-      await resendOriginal(conn.ownerChatId, patchedMsg, label);
+      await resendOriginal(conn.ownerChatId, patchedMsg);
     } else {
       await bot.sendMessage(
         conn.ownerChatId,
-        `<b>${label}. ${chatFullName}${chatUsername} deleted a message:</b>\n<i>[not cached]</i>`,
+        `<b>${chatFullName}${chatUsername} deleted a message:</b>\n<i>[not cached]</i>`,
         { parse_mode: "HTML" }
       );
     }
