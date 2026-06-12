@@ -8,6 +8,7 @@ const bot = new TelegramBot(TOKEN, {
   polling: {
     params: {
       allowed_updates: [
+        "message",
         "business_connection",
         "deleted_business_messages",
       ],
@@ -42,6 +43,21 @@ function saveConnections(map) {
 
 const businessConnections = loadConnections();
 console.log(`📂 Loaded ${businessConnections.size} saved connection(s)`);
+
+// ===================================
+// /start — confirm bot is alive
+// ===================================
+bot.onText(/\/start/, async (msg) => {
+  const conn = [...businessConnections.values()].find(c => c.ownerChatId === msg.chat.id);
+  await bot.sendMessage(
+    msg.chat.id,
+    `✅ *Bot Online!*\n\n` +
+    `🗑️ កំពុង listen: \`deleted_business_messages\`\n` +
+    `📡 Connections: *${businessConnections.size}*\n` +
+    `🕐 ${new Date().toLocaleString()}`,
+    { parse_mode: "Markdown" }
+  );
+});
 
 // ===================================
 // business_connection — Save owner chat ID
