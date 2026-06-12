@@ -195,10 +195,6 @@ bot.on("business_message", async (msg) => {
 
   const replies = [
     {
-      keywords: ["hello", "hi", "សួស្ដី", "ជំរាបសួរ"],
-      reply: `👋 *សួស្ដី ${name}!*\nរីករាយនឹងបម្រើ! តើអ្នកត្រូវការអ្វី?`,
-    },
-    {
       keywords: ["តម្លៃ", "price", "cost", "ប៉ុន្មាន", "ថ្លៃ"],
       reply: `💰 *តម្លៃសេវាកម្ម:*\n\n• Basic: $10/ខែ\n• Pro: $25/ខែ\n• Enterprise: $50/ខែ\n\nចុះឈ្មោះឥឡូវ ទទួលបានបញ្ចុះតម្លៃ 20%! 🎁`,
     },
