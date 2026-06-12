@@ -57,6 +57,12 @@ const messageCache = new Map();
 const MAX_CACHE = 500;
 
 // ===================================
+// Sender cache — stores only sender info (lighter, larger limit)
+// ===================================
+const senderCache = new Map();
+const MAX_SENDER_CACHE = 2000;
+
+// ===================================
 // Edit counter — E1, E2, E3…
 // ===================================
 let editCounter = 0;
@@ -66,6 +72,15 @@ function cacheMessage(msg) {
     messageCache.delete(messageCache.keys().next().value);
   }
   messageCache.set(msg.message_id, msg);
+
+  // Also store sender info separately with a larger limit
+  if (msg.from) {
+    if (senderCache.size >= MAX_SENDER_CACHE) {
+      senderCache.delete(senderCache.keys().next().value);
+    }
+    senderCache.set(msg.message_id, msg.from);
+  }
+
   console.log(`💾 Cached msg_id: ${msg.message_id}`);
 }
 
@@ -225,19 +240,13 @@ bot.on("deleted_business_messages", async (update) => {
   for (const id of messageIds) {
     const cached = messageCache.get(id);
 
-    // Determine who deleted: compare sender ID with owner ID
+    // Priority: cached.from → senderCache → update.chat (fallback)
+    const senderFrom = cached?.from || senderCache.get(id);
     let deleterName, deleterUsername;
-    if (cached?.from) {
-      const isOwner = cached.from.id === ownerUserId;
-      if (isOwner) {
-        // Owner deleted their own message — use owner info from cache
-        ({ full: deleterName, username: deleterUsername } = buildName(cached.from));
-      } else {
-        // Customer deleted their own message — use customer info from cache
-        ({ full: deleterName, username: deleterUsername } = buildName(cached.from));
-      }
+    if (senderFrom) {
+      ({ full: deleterName, username: deleterUsername } = buildName(senderFrom));
     } else {
-      // Not cached — fall back to update.chat (the peer/customer)
+      // Last resort: update.chat is the peer (customer)
       ({ full: deleterName, username: deleterUsername } = buildName(update.chat));
     }
 
