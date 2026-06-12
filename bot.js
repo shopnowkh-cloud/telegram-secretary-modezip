@@ -196,10 +196,16 @@ bot.on("business_connection", async (bc) => {
 bot.on("deleted_business_messages", async (update) => {
   const bcId = update.business_connection_id;
   const messageIds = update.message_ids || [];
-  const customerChatId = update.chat?.id;
   const conn = businessConnections.get(bcId);
 
-  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | customerChatId: ${customerChatId}`);
+  // Build name from update.chat (always present in deletion event)
+  const chat = update.chat || {};
+  const chatFirstName = chat.first_name || "";
+  const chatLastName = chat.last_name || "";
+  const chatFullName = [chatFirstName, chatLastName].filter(Boolean).join(" ") || "Customer";
+  const chatUsername = chat.username ? ` @${chat.username}` : "";
+
+  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | by: ${chatFullName}${chatUsername}`);
 
   if (!conn?.ownerChatId) {
     console.warn(`⚠️ No owner found for bcId: ${bcId}`);
@@ -213,11 +219,28 @@ bot.on("deleted_business_messages", async (update) => {
     const label = `K${deletionCounter}${letter}`;
     const cached = messageCache.get(id);
     if (cached) {
-      await resendOriginal(conn.ownerChatId, cached, label);
+      // Use cached msg.from for name (most accurate — the actual sender)
+      const fromFirst = cached.from?.first_name || chatFirstName;
+      const fromLast = cached.from?.last_name || chatLastName;
+      const fromName = [fromFirst, fromLast].filter(Boolean).join(" ") || "Customer";
+      const fromUsername = cached.from?.username
+        ? ` @${cached.from.username}`
+        : chatUsername;
+      // Temporarily patch cached.from so resendOriginal picks up the right name
+      const patchedMsg = {
+        ...cached,
+        from: {
+          ...cached.from,
+          first_name: fromFirst,
+          last_name: fromLast,
+          username: cached.from?.username || chat.username,
+        },
+      };
+      await resendOriginal(conn.ownerChatId, patchedMsg, label);
     } else {
       await bot.sendMessage(
         conn.ownerChatId,
-        `<b>${label}. deleted a message:</b>\n<i>msg_id ${id} — not cached</i>`,
+        `<b>${label}. ${chatFullName}${chatUsername} deleted a message:</b>\n<i>[not cached]</i>`,
         { parse_mode: "HTML" }
       );
     }
