@@ -101,10 +101,16 @@ bot.on("business_message", async (msg) => {
   const chatId = msg.chat.id;
   const text = (msg.text || "").toLowerCase().trim();
   const name = msg.from?.first_name || "អតិថិជន";
+  const bcId = msg.business_connection_id; // ✅ required for replying in business chat
 
-  console.log(`💬 [business_message] from ${name}: ${msg.text}`);
+  console.log(`💬 [business_message] from ${name} | business_connection_id: ${bcId}`);
 
-  await secretaryType(chatId, 1200);
+  // Secretary typing via business connection
+  await bot.sendChatAction(chatId, "typing", { business_connection_id: bcId });
+  await delay(1200);
+
+  const sendReply = (text, opts = {}) =>
+    bot.sendMessage(chatId, text, { business_connection_id: bcId, ...opts });
 
   const replies = [
     {
@@ -132,15 +138,14 @@ bot.on("business_message", async (msg) => {
   let matched = false;
   for (const item of replies) {
     if (item.keywords.some((kw) => text.includes(kw))) {
-      await bot.sendMessage(chatId, item.reply, { parse_mode: "Markdown" });
+      await sendReply(item.reply, { parse_mode: "Markdown" });
       matched = true;
       break;
     }
   }
 
   if (!matched) {
-    await bot.sendMessage(
-      chatId,
+    await sendReply(
       `👩‍💼 *សួស្ដី ${name}!*\n\n` +
       `សាររបស់អ្នកត្រូវបានទទួល ✅\n` +
       `ម្ចាស់ហាងនឹង reply ក្នុងពេលឆាប់!\n\n` +
@@ -156,12 +161,14 @@ bot.on("business_message", async (msg) => {
 
 bot.on("edited_business_message", async (msg) => {
   const name = msg.from?.first_name || "អតិថិជន";
-  console.log(`✏️ [edited_business_message] from ${name}: ${msg.text}`);
+  const bcId = msg.business_connection_id;
+
+  console.log(`✏️ [edited_business_message] from ${name} | business_connection_id: ${bcId}`);
 
   await bot.sendMessage(
     msg.chat.id,
     `✏️ *${name}* បានកែប្រែសារ:\n\n"${msg.text}"`,
-    { parse_mode: "Markdown" }
+    { business_connection_id: bcId, parse_mode: "Markdown" }
   );
 });
 
@@ -170,13 +177,15 @@ bot.on("edited_business_message", async (msg) => {
 // ===================================
 
 bot.on("deleted_business_messages", async (update) => {
-  console.log(`🗑️ [deleted_business_messages] IDs: ${update.message_ids?.join(", ")}`);
+  const bcId = update.business_connection_id;
+
+  console.log(`🗑️ [deleted_business_messages] IDs: ${update.message_ids?.join(", ")} | business_connection_id: ${bcId}`);
 
   await bot.sendMessage(
     update.chat.id,
     `🗑️ សារ *${update.message_ids?.length || 0}* ត្រូវបានលុប\n` +
     `IDs: \`${update.message_ids?.join(", ")}\``,
-    { parse_mode: "Markdown" }
+    { business_connection_id: bcId, parse_mode: "Markdown" }
   );
 });
 
