@@ -18,6 +18,10 @@ const bot = new TelegramBot(TOKEN, {
   },
 });
 
+// Graceful shutdown — prevents 409 Conflict on restart
+process.once("SIGINT", () => bot.stopPolling());
+process.once("SIGTERM", () => bot.stopPolling());
+
 // ===================================
 // Persist owner chat ID across restarts
 // ===================================
@@ -53,11 +57,6 @@ const messageCache = new Map();
 const MAX_CACHE = 500;
 
 // ===================================
-// Deletion counter — K1a, K1b, K2a…
-// ===================================
-let deletionCounter = 0;
-
-// ===================================
 // Edit counter — E1, E2, E3…
 // ===================================
 let editCounter = 0;
@@ -70,13 +69,17 @@ function cacheMessage(msg) {
   console.log(`💾 Cached msg_id: ${msg.message_id}`);
 }
 
-// Resend original message content to owner chat
-async function resendOriginal(ownerChatId, msg) {
-  const firstName = msg.from?.first_name || "";
-  const lastName = msg.from?.last_name || "";
-  const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Customer";
-  const username = msg.from?.username ? ` @${msg.from.username}` : "";
-  const header = `<b>${fullName}${username} deleted a message:</b>\n`;
+// Build display name from a Telegram user/chat object
+function buildName(person) {
+  const first = person?.first_name || "";
+  const last = person?.last_name || "";
+  const full = [first, last].filter(Boolean).join(" ") || "Customer";
+  const username = person?.username ? ` @${person.username}` : "";
+  return { full, username };
+}
+
+// Send the cached message content to owner, using the provided header
+async function sendCachedContent(ownerChatId, msg, header) {
   const opts = { parse_mode: "HTML" };
 
   if (msg.text) {
@@ -145,11 +148,7 @@ bot.on("edited_business_message", async (msg) => {
   }
 
   editCounter++;
-  const label = `E${editCounter}`;
-  const firstName = msg.from?.first_name || "";
-  const lastName = msg.from?.last_name || "";
-  const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Customer";
-  const username = msg.from?.username ? ` @${msg.from.username}` : "";
+  const { full, username } = buildName(msg.from);
   const opts = { parse_mode: "HTML" };
 
   const original = messageCache.get(msg.message_id);
@@ -158,15 +157,14 @@ bot.on("edited_business_message", async (msg) => {
 
   await bot.sendMessage(
     conn.ownerChatId,
-    `<b>${label}. ${fullName}${username} edited a message:</b>\n` +
+    `<b>E${editCounter}. ${full}${username} edited a message:</b>\n` +
     `<s>${originalText}</s>\n` +
     `➡️ ${newText}`,
     opts
   );
 
-  // Update cache with the new version
   cacheMessage(msg);
-  console.log(`✏️ Edit E${editCounter} by ${fullName} | msg_id: ${msg.message_id}`);
+  console.log(`✏️ Edit E${editCounter} by ${full} | msg_id: ${msg.message_id}`);
 });
 
 // ===================================
@@ -198,43 +196,26 @@ bot.on("deleted_business_messages", async (update) => {
   const messageIds = update.message_ids || [];
   const conn = businessConnections.get(bcId);
 
-  // Build name from update.chat (always present in deletion event)
-  const chat = update.chat || {};
-  const chatFirstName = chat.first_name || "";
-  const chatLastName = chat.last_name || "";
-  const chatFullName = [chatFirstName, chatLastName].filter(Boolean).join(" ") || "Customer";
-  const chatUsername = chat.username ? ` @${chat.username}` : "";
+  // update.chat is always the correct person who deleted (the chat peer)
+  const { full: deleterName, username: deleterUsername } = buildName(update.chat);
 
-  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | by: ${chatFullName}${chatUsername}`);
+  console.log(`🗑️ Deleted IDs: ${messageIds.join(", ")} | by: ${deleterName}${deleterUsername}`);
 
   if (!conn?.ownerChatId) {
     console.warn(`⚠️ No owner found for bcId: ${bcId}`);
     return;
   }
 
-  deletionCounter++;
-  for (let i = 0; i < messageIds.length; i++) {
-    const id = messageIds[i];
+  const header = `<b>${deleterName}${deleterUsername} deleted a message:</b>\n`;
+
+  for (const id of messageIds) {
     const cached = messageCache.get(id);
     if (cached) {
-      // Use cached msg.from for name (most accurate — the actual sender)
-      const fromFirst = cached.from?.first_name || chatFirstName;
-      const fromLast = cached.from?.last_name || chatLastName;
-      // Patch cached.from so resendOriginal picks up the right name
-      const patchedMsg = {
-        ...cached,
-        from: {
-          ...cached.from,
-          first_name: fromFirst,
-          last_name: fromLast,
-          username: cached.from?.username || chat.username,
-        },
-      };
-      await resendOriginal(conn.ownerChatId, patchedMsg);
+      await sendCachedContent(conn.ownerChatId, cached, header);
     } else {
       await bot.sendMessage(
         conn.ownerChatId,
-        `<b>${chatFullName}${chatUsername} deleted a message:</b>\n<i>[not cached]</i>`,
+        `<b>${deleterName}${deleterUsername} deleted a message:</b>\n<i>[not cached]</i>`,
         { parse_mode: "HTML" }
       );
     }
