@@ -243,15 +243,7 @@ bot.on("business_message", async (msg) => {
     }
   }
 
-  if (!matched) {
-    await sendReply(
-      `👩‍💼 *សួស្ដី ${name}!*\n\n` +
-      `សាររបស់អ្នកត្រូវបានទទួល ✅\n` +
-      `ម្ចាស់ហាងនឹង reply ក្នុងពេលឆាប់!\n\n` +
-      `💬 សួរអំពី: _"តម្លៃ"_ • _"ណាត់ជួប"_ • _"ទីតាំង"_ • _"ទំនាក់ទំនង"_`,
-      { parse_mode: "Markdown" }
-    );
-  }
+  // No default reply — owner handles unmatched messages manually
 });
 
 // ===================================
