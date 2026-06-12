@@ -1,12 +1,10 @@
 {
-  "name": "telegram-secretary-mode",
+  "name": "telegram-bot",
   "version": "1.0.0",
-  "description": "Telegram Bot Secretary Mode (sendChatAction) Examples",
-  "main": "04_secretary_bot_full.js",
+  "description": "Telegram Business Bot — deleted message notifications",
+  "main": "bot.js",
   "scripts": {
-    "start": "node 04_secretary_bot_full.js",
-    "basic": "node 01_basic.js",
-    "business": "node 06_business_setup_guide.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.67.0"
